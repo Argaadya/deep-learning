@@ -65,7 +65,9 @@ Data Description:
 - `review_id`: id of the review
 - `title`: Title of the game
 - `year`: Year in which the review was posted
+- `user_review`: Review of the user
 - `user_suggestion`: Game marked Recommended(1) and Not Recommended(0) by the user
+
 
 # Text Preprocessing
 
@@ -76,6 +78,7 @@ We will start by cleansing the data with the following steps:
 - Make all characters lowercase
 - Remove all non ASCII characters
 - Remove all mention to name (@....)
+- Remove the phrase `early access review`
 - Remove all https or url link
 - Remove all hashtag (#...)
 - Remove all html tag
@@ -89,17 +92,12 @@ We will start by cleansing the data with the following steps:
 
 Since the process take a quite long time to run, we will use parallel computing to get the job done using the `furrr` package.
 
-```{r eval=FALSE, message=FALSE, warning=FALSE}
-library(furrr) 
-plan(multisession, workers = 4) # Using 4 CPU cores
-
-df_clean <- df %>% 
-  mutate(
-    text_clean = user_review %>% 
-      future_map_chr(function(x) x %>% 
+```{r}
+cleansing_text <- function(x) x %>% 
                        replace_non_ascii() %>% 
                        tolower() %>% 
                        str_replace_all(pattern = "\\@.*? |\\@.*?[:punct:]", replacement = " ") %>% 
+                       str_remove(pattern = "early access review") %>%
                        replace_url() %>% 
                        replace_hash() %>% 
                        replace_html() %>% 
@@ -111,10 +109,22 @@ df_clean <- df %>%
                        str_replace_all("[:digit:]", " ") %>% 
                        str_trim() %>% 
                        str_squish()
-                     )
+
+cleansing_text("I really love this game !!!")
+```
+
+
+```{r eval=FALSE, message=FALSE, warning=FALSE}
+library(furrr) 
+plan(multisession, workers = 4) # Using 4 CPU cores
+
+df_clean <- df %>% 
+  mutate(
+    text_clean = user_review %>% 
+      future_map_chr(cleansing_text)
     ) 
 
-glimpse(df_clean)
+head(df_clean)
 ```
 
 ```{r echo=FALSE}
@@ -186,10 +196,10 @@ tokenizer <- text_tokenizer(num_words = num_words) %>%
   fit_text_tokenizer(data_train$text_clean)
 
 # Maximum Length of Word to use
-maxlen <- 200
+maxlen <- 250
 ```
 
-## Preprare Data
+## Padding Text Sequence
 
 Since the length of the text can differ, we will pad the sequence to make sure all text has the same length by inserting `0` value if the text is short. We will use `pre` padding sequence method that will ensure information from LSTM layer will not lost. See [this paper](https://arxiv.org/abs/1903.07288) that discuss about it. Since we only use maximum length of word by `200` while some review has more than 200 words, we will truncate and only use the first 200 words using the `post` truncating type. 
 
@@ -201,10 +211,10 @@ test_x <- texts_to_sequences(tokenizer, data_test$text_clean) %>%
   pad_sequences(maxlen = maxlen, padding = "pre", truncating = "post")
 
 # Transform the target variable on data train
-train_y <- to_categorical(data_train$user_suggestion)
+train_y <- data_train$user_suggestion
 ```
 
-Let's check the dimension of the feature.
+Let's check the dimension of the feature. 
 
 ```{r}
 dim(train_x)
@@ -227,11 +237,11 @@ model <- keras_model_sequential(name = "lstm_model") %>%
                   ) %>% 
   layer_lstm(name = "LSTM",
              units = 8,
-             kernel_regularizer = regularizer_l1_l2(l1 = 0.075, l2 = 0.075),
+             kernel_regularizer = regularizer_l1_l2(l1 = 0.05, l2 = 0.05),
              return_sequences = F
              ) %>% 
   layer_dense(name = "Output",
-              units = 2,
+              units = 1,
               activation = "sigmoid"
               )
 
@@ -249,7 +259,7 @@ model
 
 ## Model Fitting
 
-The model will be trained using `adam` optimizer with learning rate of 0.001 with `binary cross-entropy` loss function. The model trained with 10 epoch and 64 batch size. We will also use 10% of the training dataset as the validation dataset to monitor if the model will go overfit after some time.
+The model will be trained using `adam` optimizer with learning rate of 0.001 with `binary cross-entropy` loss function. The model trained with 8 epoch and 64 batch size. We will also use 10% of the training dataset as the validation dataset to monitor if the model will go overfit after some time.
 
 ```{r eval=FALSE}
 model %>% 
@@ -258,7 +268,7 @@ model %>%
           loss = "binary_crossentropy"
           )
 
-epochs <- 10
+epochs <- 9
 batch_size <- 64
 
 train_history <- model %>% 
@@ -273,14 +283,16 @@ train_history <- model %>%
       view_metrics = 0
       )
 
-plot(train_history) 
+plot(train_history) +
+  geom_line()
 ```
 
 ```{r echo=FALSE}
 # Load saved training history
 train_history <- read_rds("output/train_history.rds")
 
-plot(train_history)
+plot(train_history) +
+  geom_line(lwd = 1) 
 ```
 
 ## Model Evaluation
@@ -290,7 +302,7 @@ Now we will predict the data test using the trained model.
 ```{r}
 pred_test <- predict_classes(model, test_x)
 
-head(pred_test)
+head(pred_test, 10)
 ```
 
 Let's check the confusion matrix.
@@ -308,11 +320,11 @@ table("Prediction" = pred_class, "Actual" = true_class)
 Finally, we can evaluate the model using the main performance metrics: accuracy, recall, and precision.
 
 ```{r}
-data.frame(Accuracy = accuracy_vec(pred_class, true_class),
+data.frame(
+           Accuracy = accuracy_vec(pred_class, true_class),
            Recall = sens_vec(pred_class, true_class),
            Precision = precision_vec(pred_class, true_class),
-           "F1 Score" = f_meas_vec(pred_class, true_class),
-           check.names = F
+           F1 = f_meas_vec(pred_class, true_class)
            )
 ```
 
@@ -380,6 +392,9 @@ test_token <- test_token %>%
 ```
 
 ```{r echo=FALSE}
+# train_token  %>% write_rds("train_stem.rds")
+# test_token %>% write_rds("test_stem.rds")
+
 train_token <- read_rds("output/train_stem.rds")
 test_token <- read_rds("output/test_stem.rds")
 ```
