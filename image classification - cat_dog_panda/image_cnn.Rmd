@@ -33,6 +33,10 @@ On this article, we will try to build a simple image classification that will cl
 knitr::include_graphics("assets/grid.png")
 ```
 
+# Data
+
+You can download the data and the source code for practice [here](https://github.com/Argaadya/deep-learning/tree/master/image%20classification%20-%20cat_dog_panda). The data is a modified version the [Animal Image Dataset(DOG, CAT and PANDA)](https://www.kaggle.com/ashishsaxena2209/animal-image-datasetdog-cat-and-panda) on Kaggle.
+
 # Library and Setup
 
 The following is the list of required packages to build and evaluate our image classification. You also need to install the `pillow` library in your conda environment to manipulate image data. Just open the terminal in the Rstudio and insert the following code.
