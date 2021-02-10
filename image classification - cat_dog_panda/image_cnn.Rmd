@@ -39,7 +39,7 @@ You can download the data and the source code for practice [here](https://github
 
 # Library and Setup
 
-The following is the list of required packages to build and evaluate our image classification. You also need to install the `pillow` library in your conda environment to manipulate image data. Just open the terminal in the Rstudio and insert the following code.
+The following is the list of required packages to build and evaluate our image classification. You also need to install the `pillow` and `Scipy` library in your conda environment to manipulate image data. Just open the terminal in the Rstudio and insert the following code.
 
 1. Activate your conda environment, if you use `r-tensorflow`, you need to switch the environment first.
 
@@ -48,6 +48,10 @@ The following is the list of required packages to build and evaluate our image c
 2. Install the `pillow` package
 
 `conda install -c anaconda pillow`
+
+3. Install the `scipy` package
+
+`conda install -c anaconda scipy`
 
 ```{r echo=FALSE}
 knitr::include_graphics("assets/terminal.png")
